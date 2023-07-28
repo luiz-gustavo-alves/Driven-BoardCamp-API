@@ -58,18 +58,21 @@ export const createRental = async (req, res) => {
             , [gameId]
         );
 
-        if (checkValidCustomer.rowCount < 1 || checkValidGame.rowCount < 1 || checkValidGame.rows[0].stockTotal <= 0) {
+        if (checkValidCustomer.rowCount < 1 || checkValidGame.rowCount < 1) {
             return res.sendStatus(400);
         }
 
-        await db.query(
-            `UPDATE games
-                SET "stockTotal" = "stockTotal" - 1
-                WHERE id = $1;`
+        const { pricePerDay, stockTotal } = checkValidGame.rows[0];
+
+        const checkRentalGame = await db.query(
+            'SELECT COUNT(*) FROM rentals WHERE "gameId" = $1 AND "returnDate" IS NULL;'
             , [gameId]
         );
 
-        const { pricePerDay } = checkValidGame.rows[0];
+        const rentalGameCount = checkRentalGame.rows[0].count;
+        if (rentalGameCount >= stockTotal) {
+            return res.sendStatus(400);
+        }
 
         const rentDate = dayjs().format('YYYY-MM-DD');
         const originalPrice = daysRented * pricePerDay;
@@ -108,7 +111,7 @@ export const finishRental = async (req, res) => {
         }
 
         const currentDate = new Date();
-        const daysDiff = dateDifferenceInDays(currentDate, new Date(rentDate));
+        const daysDiff = dateDifferenceInDays(rentDate, currentDate);
 
         const gameInQuery = await db.query(
             `SELECT "pricePerDay" FROM games WHERE id = $1;`
@@ -117,19 +120,12 @@ export const finishRental = async (req, res) => {
 
         const { pricePerDay } = gameInQuery.rows[0];
         const delayFee = (daysDiff > daysRented) ? (pricePerDay * daysDiff) : 0;
-    
+
         await db.query(
             `UPDATE rentals
                 SET "returnDate" = $1, "delayFee" = $2
                 WHERE id = $3;`
             , [currentDate, delayFee, id]  
-        );
-
-        await db.query(
-            `UPDATE games
-                SET "stockTotal" = "stockTotal" + 1
-                WHERE id = $1;`
-            , [gameId]
         );
 
         res.sendStatus(200);

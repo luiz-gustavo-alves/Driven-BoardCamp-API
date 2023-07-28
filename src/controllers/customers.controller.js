@@ -20,7 +20,9 @@ export const getCustomerById = async (req, res) => {
 
     try {
         const customerById = await db.query(
-            "SELECT * FROM customers WHERE id = $1", [id]
+            `SELECT customers.*,
+                TO_CHAR(customers.birthday, 'YYYY-MM-DD') AS birthday
+                FROM customers WHERE id = $1`, [id]
         );
 
         if (customerById.rowCount < 1) {
