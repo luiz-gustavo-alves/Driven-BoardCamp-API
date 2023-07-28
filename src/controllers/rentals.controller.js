@@ -1,42 +1,14 @@
-import db from "../database/db.connection.js";
+import rentalService from "../services/rentals.service.js";
+import customerService from "../services/customers.service.js";
+import gameService from "../services/games.service.js";
 import dayjs from "dayjs";
-
 import dateDifferenceInDays from "../utils/dateDifferenceInDays.js";
 
 export const getRentals = async (req, res) => {
 
     try {
-        const rentals = await db.query(
-            `SELECT rentals.*,
-                TO_CHAR(rentals."rentDate", 'YYYY-MM-DD') AS "rentDate",
-                TO_CHAR(rentals."returnDate", 'YYYY-MM-DD') AS "returnDate",
-                customers.name AS "customerName",
-                games.name AS "gameName"
-                FROM rentals
-                JOIN customers ON rentals."customerId" = customers.id
-                JOIN games ON rentals."gameId" = games.id;`
-        );
-
-        const result = rentals.rows.map(rental => ({
-            id: rental.id,
-            customerId: rental.customerId,
-            gameId: rental.gameId,
-            rentDate: rental.rentDate,
-            daysRented: rental.daysRented,
-            returnDate: rental.returnDate,
-            originalPrice: rental.originalPrice,
-            delayFee: rental.delayFee,
-            customer: {
-                id: rental.customerId,
-                name: rental.customerName
-            },
-            game: {
-                id: rental.gameId,
-                name: rental.gameName
-            }
-        }));
-
-        res.send(result);
+        const formatedRentals = await rentalService.selectAllFormatedRentals();
+        res.send(formatedRentals);
 
     } catch (err) {
         res.status(500).send(err.message);
@@ -48,28 +20,16 @@ export const createRental = async (req, res) => {
     const { customerId, gameId, daysRented } = res.locals.data;
 
     try {
-        const checkValidCustomer = await db.query(
-            "SELECT * FROM customers WHERE id = $1;"
-            , [customerId]
-        );
+        const customer = await customerService.selectCustomerById(customerId);
+        const game = await gameService.selectGameById(gameId);
 
-        const checkValidGame = await db.query(
-            "SELECT * FROM games WHERE id = $1;"
-            , [gameId]
-        );
-
-        if (checkValidCustomer.rowCount < 1 || checkValidGame.rowCount < 1) {
+        if (!customer.rows[0] || !game.rows[0]) {
             return res.sendStatus(400);
         }
 
-        const { pricePerDay, stockTotal } = checkValidGame.rows[0];
+        const { pricePerDay, stockTotal } = game.rows[0];
 
-        const checkRentalGame = await db.query(
-            'SELECT COUNT(*) FROM rentals WHERE "gameId" = $1 AND "returnDate" IS NULL;'
-            , [gameId]
-        );
-
-        const rentalGameCount = checkRentalGame.rows[0].count;
+        const rentalGameCount = await rentalService.countRentalGameById(gameId);
         if (rentalGameCount >= stockTotal) {
             return res.sendStatus(400);
         }
@@ -77,13 +37,15 @@ export const createRental = async (req, res) => {
         const rentDate = dayjs().format('YYYY-MM-DD');
         const originalPrice = daysRented * pricePerDay;
 
-        await db.query(
-            `INSERT INTO rentals 
-                ("customerId", "gameId", "rentDate", "daysRented", "returnDate", "originalPrice", "delayFee")
-                VALUES ($1, $2, $3, $4, $5, $6, $7);`
-            , [customerId, gameId, rentDate, daysRented, null, originalPrice, null]
-        );
+        const payload = {
+            customerId: customerId,
+            gameId: gameId,
+            rentDate: rentDate,
+            daysRented: daysRented,
+            originalPrice: originalPrice
+        }
 
+        await rentalService.createRental(payload);
         res.sendStatus(201);
 
     } catch (err) {
@@ -96,38 +58,24 @@ export const finishRental = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const checkValidRental = await db.query(
-            "SELECT * FROM rentals WHERE id = $1;"
-            , [id]
-        );
-
-        if (checkValidRental.rowCount < 1) {
+        const rental = await rentalService.selectRentalById(id);
+        if (!rental.rows[0]) {
             return res.sendStatus(404);
         }
 
-        const { gameId, daysRented, rentDate, returnDate } = checkValidRental.rows[0];
+        const { gameId, daysRented, rentDate, returnDate } = rental.rows[0];
         if (returnDate !== null) {
             return res.sendStatus(400);
         }
 
         const currentDate = new Date();
         const daysDiff = dateDifferenceInDays(rentDate, currentDate);
+        const game = await gameService.selectGameById(gameId);
 
-        const gameInQuery = await db.query(
-            `SELECT "pricePerDay" FROM games WHERE id = $1;`
-            , [gameId]
-        );
+        const { pricePerDay } = game.rows[0];
+        const delayFee = (daysDiff > daysRented) ? (pricePerDay * (daysDiff - daysRented)) : 0;
 
-        const { pricePerDay } = gameInQuery.rows[0];
-        const delayFee = (daysDiff > daysRented) ? (pricePerDay * daysDiff) : 0;
-
-        await db.query(
-            `UPDATE rentals
-                SET "returnDate" = $1, "delayFee" = $2
-                WHERE id = $3;`
-            , [currentDate, delayFee, id]  
-        );
-
+        await rentalService.updateReturnDateAndDelayFee(currentDate, delayFee, id);
         res.sendStatus(200);
 
     } catch (err) {
@@ -140,24 +88,17 @@ export const deleteRental = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const checkValidRental = await db.query(
-            "SELECT * FROM rentals WHERE id = $1;"
-            , [id]
-        );
-
-        if (checkValidRental.rowCount < 1) {
+        const rental = await rentalService.selectRentalById(id);
+        if (!rental.rows[0]) {
             return res.sendStatus(404);
         }
 
-        if (checkValidRental.rows[0].returnDate === null) {
+        const { returnDate } = rental.rows[0];
+        if (returnDate === null) {
             return res.sendStatus(400);
         }
 
-        await db.query(
-            "DELETE FROM rentals WHERE id = $1;"
-            , [id]
-        );
-
+        await rentalService.deleteRentalById(id);
         res.sendStatus(200);
 
     } catch (err) {

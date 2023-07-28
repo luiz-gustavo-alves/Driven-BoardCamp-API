@@ -1,9 +1,9 @@
-import db from "../database/db.connection.js";
+import gameService from "../services/games.service.js";
 
 export const getGames = async (req, res) => {
 
     try {
-        const games = await db.query("SELECT * FROM games");
+        const games = await gameService.selectAllGames();
         res.send(games.rows); 
 
     } catch (err) {
@@ -13,19 +13,15 @@ export const getGames = async (req, res) => {
 
 export const createGame = async (req, res) => {
 
-    const { name, image, stockTotal, pricePerDay } = res.locals.data;
+    const { name } = res.locals.data;
 
     try {
-        const checkDuplicateGame = await db.query("SELECT * FROM games WHERE name = $1", [name]);
-        if (checkDuplicateGame.rowCount >= 1) {
+        const game = await gameService.selectGameByName(name);
+        if (game.rows[0]) {
             return res.sendStatus(409);
         }
 
-        await db.query(
-            `INSERT INTO games (name, image, "stockTotal", "pricePerDay") VALUES ($1, $2, $3, $4);`,
-            [name, image, stockTotal, pricePerDay]
-        );
-
+        await gameService.createGame(res.locals.data);
         res.sendStatus(201);
 
     } catch (err) {

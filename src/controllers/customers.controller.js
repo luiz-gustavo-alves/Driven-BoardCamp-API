@@ -1,12 +1,9 @@
-import db from "../database/db.connection.js";
+import customerService from "../services/customers.service.js";
 
 export const getCustomers = async (req, res) => {
 
     try {
-        const customers = await db.query(
-            "SELECT *, TO_CHAR(birthday, 'YYYY-MM-DD') birthday FROM customers"
-        );
-
+        const customers = await customerService.selectAllCustomers();
         res.send(customers.rows);
 
     } catch (err) {
@@ -19,17 +16,14 @@ export const getCustomerById = async (req, res) => {
     const { id } = req.params;
 
     try {
-        const customerById = await db.query(
-            `SELECT customers.*,
-                TO_CHAR(customers.birthday, 'YYYY-MM-DD') AS birthday
-                FROM customers WHERE id = $1`, [id]
-        );
+        const customer = await customerService.selectCustomerById(id);
 
-        if (customerById.rowCount < 1) {
+        /* Customer not found */
+        if (!customer.rows[0]) {
             return res.sendStatus(404);
         }
 
-        res.send(customerById.rows[0]);
+        res.send(customer.rows[0]);
 
     } catch (err) {
         res.status(500).send(err.message);
@@ -38,22 +32,17 @@ export const getCustomerById = async (req, res) => {
 
 export const createCustomer = async (req, res) => {
 
-    const { name, phone, cpf, birthday } = res.locals.data;
+    const { cpf } = res.locals.data;
 
     try {
-        const checkDuplicateCustomer = await db.query(
-            "SELECT * FROM customers WHERE cpf = $1", [cpf]
-        );
+        const customer = await customerService.selectCustomerByCPF(cpf);
 
-        if (checkDuplicateCustomer.rowCount >= 1) {
+        /* User with payload CPF already exists */
+        if (customer.rows[0]) {
             return res.sendStatus(409);
         }
 
-        await db.query(
-            "INSERT INTO customers (name, phone, cpf, birthday) VALUES ($1, $2, $3, $4)",
-            [name, phone, cpf, birthday]
-        );
-
+        await customerService.createCustomer(res.locals.data);
         res.sendStatus(201);
 
     } catch (err) {
@@ -63,27 +52,22 @@ export const createCustomer = async (req, res) => {
 
 export const updateCustomerById = async (req, res) => {
 
-    const { name, phone, cpf, birthday } = res.locals.data;
+    const { cpf } = res.locals.data;
     const { id } = req.params;
 
     try {
-        const checkCpf = await db.query(
-            "SELECT * FROM customers WHERE cpf = $1", [cpf]
-        );
+        const customer = await customerService.selectCustomerByCPF(cpf);
+        if (customer.rows[0]) {
 
-        if (checkCpf.rowCount >= 1) {
+            const customerId = customer.rows[0].id;
 
             /* Payload CPF is from another customer */
-            if (checkCpf.rows[0].id !== Number(id)) {
+            if (customerId !== Number(id)) {
                 return res.sendStatus(409);
             }
         }
 
-        await db.query(
-            "UPDATE customers SET name = $1, phone = $2, cpf = $3, birthday = $4 WHERE id = $5",
-            [name, phone, cpf, birthday, id]
-        );
-
+        await customerService.updateCustomerById(res.locals.data, id);
         res.sendStatus(200);
 
     } catch (err) {
