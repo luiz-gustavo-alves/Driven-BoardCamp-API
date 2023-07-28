@@ -1,8 +1,8 @@
 import Joi from "joi";
 
-export const RentalSchema = Joi.object({
+export const rentalSchema = Joi.object({
 
-    customerId: Joi.integer().positive().required(),
-    gameId: Joi.integer().positive().required(),
-    daysRented: Joi.integer().positive().max(9999).required()
+    customerId: Joi.number().integer().positive().required(),
+    gameId: Joi.number().integer().positive().required(),
+    daysRented: Joi.number().integer().positive().max(9999).required()
 });
