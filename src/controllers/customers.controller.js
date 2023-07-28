@@ -27,7 +27,7 @@ export const getCustomerById = async (req, res) => {
             return res.sendStatus(404);
         }
 
-        res.send(customerById.rows);
+        res.send(customerById.rows[0]);
 
     } catch (err) {
         res.status(500).send(err.message);
