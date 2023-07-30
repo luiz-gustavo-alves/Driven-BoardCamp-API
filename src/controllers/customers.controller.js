@@ -2,8 +2,14 @@ import customerService from "../services/customers.service.js";
 
 export const getCustomers = async (req, res) => {
 
+    const queryLength = Object.keys(req.query).length;
+
     try {
-        const customers = await customerService.selectAllCustomers();
+        const customers = (queryLength >= 1) ? 
+            await customerService.selectCustomersByQuery(req.query)
+            :
+            await customerService.selectAllCustomers();
+
         res.send(customers.rows);
 
     } catch (err) {
@@ -37,7 +43,7 @@ export const createCustomer = async (req, res) => {
     try {
         const customer = await customerService.selectCustomerByCPF(cpf);
 
-        /* User with payload CPF already exists */
+        /* Customer with payload CPF already exists */
         if (customer.rows[0]) {
             return res.sendStatus(409);
         }
@@ -61,7 +67,7 @@ export const updateCustomerById = async (req, res) => {
 
             const customerId = customer.rows[0].id;
 
-            /* Payload CPF is from another customer */
+            /* Check if payload CPF is from another customer */
             if (customerId !== Number(id)) {
                 return res.sendStatus(409);
             }

@@ -1,14 +1,18 @@
 import rentalService from "../services/rentals.service.js";
 import customerService from "../services/customers.service.js";
 import gameService from "../services/games.service.js";
-import dayjs from "dayjs";
-import dateDifferenceInDays from "../utils/dateDifferenceInDays.js";
 
 export const getRentals = async (req, res) => {
 
+    const queryLength = Object.keys(req.query).length;
+
     try {
-        const formatedRentals = await rentalService.selectAllFormatedRentals();
-        res.send(formatedRentals);
+        const rentals = (queryLength >= 1) ?
+            await rentalService.selectRentalsByQuery(req.query)
+            :
+            await rentalService.selectAllRentals();
+
+        res.send(rentals);
 
     } catch (err) {
         res.status(500).send(err.message);
@@ -17,35 +21,26 @@ export const getRentals = async (req, res) => {
 
 export const createRental = async (req, res) => {
 
-    const { customerId, gameId, daysRented } = res.locals.data;
+    const { customerId, gameId } = res.locals.data;
 
     try {
         const customer = await customerService.selectCustomerById(customerId);
         const game = await gameService.selectGameById(gameId);
 
+        /* Check valid customer/game ID */
         if (!customer.rows[0] || !game.rows[0]) {
             return res.sendStatus(400);
         }
 
         const { pricePerDay, stockTotal } = game.rows[0];
-
         const rentalGameCount = await rentalService.countRentalGameById(gameId);
+
+        /* Check if game is available for rental */
         if (rentalGameCount >= stockTotal) {
             return res.sendStatus(400);
         }
 
-        const rentDate = dayjs().format('YYYY-MM-DD');
-        const originalPrice = daysRented * pricePerDay;
-
-        const payload = {
-            customerId: customerId,
-            gameId: gameId,
-            rentDate: rentDate,
-            daysRented: daysRented,
-            originalPrice: originalPrice
-        }
-
-        await rentalService.createRental(payload);
+        await rentalService.createRental(res.locals.data, pricePerDay);
         res.sendStatus(201);
 
     } catch (err) {
@@ -56,26 +51,19 @@ export const createRental = async (req, res) => {
 export const finishRental = async (req, res) => {
 
     const { id } = req.params;
+    const rental = res.locals.rental;
+
+    const { gameId, returnDate } = rental.rows[0];
+    /* Trying to finish a rental that is already finished */
+    if (returnDate !== null) {
+        return res.sendStatus(400);
+    }
 
     try {
-        const rental = await rentalService.selectRentalById(id);
-        if (!rental.rows[0]) {
-            return res.sendStatus(404);
-        }
-
-        const { gameId, daysRented, rentDate, returnDate } = rental.rows[0];
-        if (returnDate !== null) {
-            return res.sendStatus(400);
-        }
-
-        const currentDate = new Date();
-        const daysDiff = dateDifferenceInDays(rentDate, currentDate);
         const game = await gameService.selectGameById(gameId);
-
         const { pricePerDay } = game.rows[0];
-        const delayFee = (daysDiff > daysRented) ? (pricePerDay * (daysDiff - daysRented)) : 0;
 
-        await rentalService.updateReturnDateAndDelayFee(currentDate, delayFee, id);
+        await rentalService.updateReturnDateAndDelayFee(rental.rows[0], pricePerDay, id);
         res.sendStatus(200);
 
     } catch (err) {
@@ -86,18 +74,16 @@ export const finishRental = async (req, res) => {
 export const deleteRental = async (req, res) => {
 
     const { id } = req.params;
+    const rental = res.locals.rental;
+
+    const { returnDate } = rental.rows[0];
+
+    /* Trying to delete a rental that is not finished yet */
+    if (returnDate === null) {
+        return res.sendStatus(400);
+    }
 
     try {
-        const rental = await rentalService.selectRentalById(id);
-        if (!rental.rows[0]) {
-            return res.sendStatus(404);
-        }
-
-        const { returnDate } = rental.rows[0];
-        if (returnDate === null) {
-            return res.sendStatus(400);
-        }
-
         await rentalService.deleteRentalById(id);
         res.sendStatus(200);
 
