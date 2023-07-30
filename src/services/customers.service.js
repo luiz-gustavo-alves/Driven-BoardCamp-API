@@ -1,4 +1,5 @@
 import db from "../database/db.connection.js";
+import setQueryOptions from "../utils/setQueryOptions.js";
 
 const selectAllCustomers = async () => {
 
@@ -9,6 +10,26 @@ const selectAllCustomers = async () => {
         `
     );
 
+    return customers;
+}
+
+const selectCustomersByQuery = async (query) => {
+
+    const { cpf } = query;
+
+    let queryString = `
+        SELECT *,
+            TO_CHAR(birthday, 'YYYY-MM-DD') birthday
+            FROM customers
+    `;
+
+    if (cpf) {
+        queryString += ` WHERE cpf LIKE '%${cpf}%' `;
+    }
+
+    queryString += setQueryOptions(query);
+
+    const customers = await db.query(queryString, []);
     return customers;
 }
 
@@ -69,6 +90,7 @@ const updateCustomerById = async (payload, id) => {
 
 const customerService = {
     selectAllCustomers,
+    selectCustomersByQuery,
     selectCustomerById,
     selectCustomerByCPF,
     createCustomer,

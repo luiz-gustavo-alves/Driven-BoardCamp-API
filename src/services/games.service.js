@@ -1,4 +1,5 @@
 import db from "../database/db.connection.js";
+import setQueryOptions from "../utils/setQueryOptions.js";
 
 const selectAllGames = async () => {
 
@@ -8,6 +9,25 @@ const selectAllGames = async () => {
         `
     );
 
+    return games;
+}
+
+const selectGamesByQuery = async (query) => {
+
+    const { name } = query;
+
+    let queryString = `
+        SELECT *
+            FROM games;
+    `;
+
+    if (name) {
+        queryString += ` WHERE name LIKE ${name} `;
+    }
+
+    queryString += setQueryOptions(query);
+
+    const games = await db.query(queryString, []);
     return games;
 }
 
@@ -49,6 +69,7 @@ const createGame = async (payload) => {
 
 const gameService = {
     selectAllGames,
+    selectGamesByQuery,
     selectGameById,
     selectGameByName,
     createGame

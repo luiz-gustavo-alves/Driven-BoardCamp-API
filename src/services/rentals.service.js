@@ -1,9 +1,10 @@
 import db from "../database/db.connection.js";
 import dayjs from "dayjs";
-
 import dateDifferenceInDays from "../utils/dateDifferenceInDays.js";
+import formatRentals from "../utils/formatRentals.js";
+import setQueryOptions from "../utils/setQueryOptions.js";
 
-const selectAllFormatedRentals = async () => {
+const selectAllRentals = async () => {
 
     const rentals = await db.query(
         `SELECT rentals.*,
@@ -11,31 +12,54 @@ const selectAllFormatedRentals = async () => {
             TO_CHAR(rentals."returnDate", 'YYYY-MM-DD') AS "returnDate",
             customers.name AS "customerName",
             games.name AS "gameName"
-            FROM rentals
+        FROM rentals
             JOIN customers ON rentals."customerId" = customers.id
             JOIN games ON rentals."gameId" = games.id;
         `
     );
 
-    const formatedRentals = rentals.rows.map(rental => ({
-        id: rental.id,
-        customerId: rental.customerId,
-        gameId: rental.gameId,
-        rentDate: rental.rentDate,
-        daysRented: rental.daysRented,
-        returnDate: rental.returnDate,
-        originalPrice: rental.originalPrice,
-        delayFee: rental.delayFee,
-        customer: {
-            id: rental.customerId,
-            name: rental.customerName
-        },
-        game: {
-            id: rental.gameId,
-            name: rental.gameName
-        }
-    }));
+    const formatedRentals = formatRentals(rentals);
+    return formatedRentals;
+}
 
+const selectRentalsByQuery = async (query) => {
+
+    const { customerId, gameId, status, startDate } = query;
+
+    let queryString = `
+        SELECT rentals.*,
+            TO_CHAR(rentals."rentDate", 'YYYY-MM-DD') AS "rentDate",
+            TO_CHAR(rentals."returnDate", 'YYYY-MM-DD') AS "returnDate",
+            customers.name AS "customerName",
+            games.name AS "gameName"
+        FROM rentals
+            JOIN customers ON rentals."customerId" = customers.id
+            JOIN games ON rentals."gameId" = games.id
+    `;
+
+    if (customerId) {
+        queryString += ` WHERE customerId LIKE %${customerId}% `;
+    }
+
+    if (gameId) {
+        queryString += ` WHERE gameId LIKE %${gameId}% `;
+    }
+
+    if (status === 'open') {
+        queryString += ` WHERE "returnDate" IS null `;
+
+    } else if (status === 'closed') {
+        queryString += ` WHERE "returnDate" IS NOT null `;
+    }
+
+    if (startDate) {
+        queryString += ` WHERE "rentDate" >= '${startDate}'::date `;
+    }
+
+    queryString += setQueryOptions(query);
+
+    const rentals = await db.query(queryString, []);
+    const formatedRentals = formatRentals(rentals);
     return formatedRentals;
 }
 
@@ -51,9 +75,12 @@ const selectRentalById = async (id) => {
     return rental;
 }
 
-const createRental = async (payload) => {
+const createRental = async (payload, pricePerDay) => {
 
-    const {customerId, gameId, rentDate, daysRented, originalPrice } = payload;
+    const {customerId, gameId, daysRented } = payload;
+
+    const rentDate = dayjs().format('YYYY-MM-DD');
+    const originalPrice = daysRented * pricePerDay;
 
     await db.query(
         `INSERT INTO rentals 
@@ -75,13 +102,19 @@ const countRentalGameById = async (id) => {
     return rentalGameCount.rows[0].count;
 }
 
-const updateReturnDateAndDelayFee = async (returnDate, delayFee, id) => {
+const updateReturnDateAndDelayFee = async (payload, pricePerDay, id) => {
+
+    const { rentDate, daysRented } = payload;
+
+    const currentDate = new Date();
+    const daysDiff = dateDifferenceInDays(rentDate, currentDate);
+    const delayFee = (daysDiff > daysRented) ? (pricePerDay * (daysDiff - daysRented)) : 0;
 
     await db.query(
         `UPDATE rentals
             SET "returnDate" = $1, "delayFee" = $2
             WHERE id = $3;`
-        , [returnDate, delayFee, id]  
+        , [currentDate, delayFee, id]  
     );
 }
 
@@ -96,7 +129,8 @@ const deleteRentalById = async (id) => {
 }
 
 const rentalService = {
-    selectAllFormatedRentals,
+    selectAllRentals,
+    selectRentalsByQuery,
     selectRentalById,
     createRental,
     countRentalGameById,
