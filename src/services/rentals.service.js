@@ -26,6 +26,7 @@ const selectRentalsByQuery = async (query) => {
 
     const { customerId, gameId, status, startDate } = query;
 
+    const tableName = "rentals";
     let queryString = `
         SELECT rentals.*,
             TO_CHAR(rentals."rentDate", 'YYYY-MM-DD') AS "rentDate",
@@ -38,27 +39,33 @@ const selectRentalsByQuery = async (query) => {
     `;
 
     if (customerId) {
-        queryString += ` WHERE customerId LIKE %${customerId}% `;
+        queryString += ` WHERE "customerId" = ${customerId} `;
     }
 
     if (gameId) {
-        queryString += ` WHERE gameId LIKE %${gameId}% `;
+        queryString += queryString.includes("WHERE") ? " AND " : " WHERE ";
+        queryString += `"gameId" = ${gameId} `;
     }
 
-    if (status === 'open') {
-        queryString += ` WHERE "returnDate" IS null `;
+    if (status) {
+        queryString += queryString.includes("WHERE") ? " AND " : " WHERE ";
 
-    } else if (status === 'closed') {
-        queryString += ` WHERE "returnDate" IS NOT null `;
+        if (status === 'open') {
+            queryString += `"returnDate" IS null `;
+    
+        } else if (status === 'closed') {
+            queryString += `"returnDate" IS NOT null `;
+        }
     }
 
     if (startDate) {
-        queryString += ` WHERE "rentDate" >= '${startDate}'::date `;
+        queryString += queryString.includes("WHERE") ? " AND " : " WHERE ";
+        queryString += `"rentDate" >= '${startDate}'::date `;
     }
 
-    queryString += setQueryOptions(query);
-
+    queryString += setQueryOptions(query, tableName);
     const rentals = await db.query(queryString, []);
+
     const formatedRentals = formatRentals(rentals);
     return formatedRentals;
 }

@@ -17,9 +17,10 @@ const selectCustomersByQuery = async (query) => {
 
     const { cpf } = query;
 
+    const tableName = "customers";
     let queryString = `
         SELECT *,
-            TO_CHAR(birthday, 'YYYY-MM-DD') birthday
+            TO_CHAR(birthday, 'YYYY-MM-DD') AS birthday
             FROM customers
     `;
 
@@ -27,9 +28,9 @@ const selectCustomersByQuery = async (query) => {
         queryString += ` WHERE cpf LIKE '%${cpf}%' `;
     }
 
-    queryString += setQueryOptions(query);
-
+    queryString += setQueryOptions(query, tableName);
     const customers = await db.query(queryString, []);
+
     return customers;
 }
 

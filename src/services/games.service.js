@@ -16,18 +16,19 @@ const selectGamesByQuery = async (query) => {
 
     const { name } = query;
 
+    const tableName = "games";
     let queryString = `
         SELECT *
-            FROM games;
+            FROM games
     `;
 
     if (name) {
-        queryString += ` WHERE name LIKE ${name} `;
+        queryString += ` WHERE name LIKE '%${name}%' `;
     }
 
-    queryString += setQueryOptions(query);
-
+    queryString += setQueryOptions(query, tableName);
     const games = await db.query(queryString, []);
+
     return games;
 }
 
