@@ -5,17 +5,18 @@ export default function setQueryOptions(query, tableName) {
     let queryString = ``;
 
     if (order) {
-        queryString += ` ORDER BY ${tableName}.${order} `;
+        queryString += ` ORDER BY ${tableName}."${order}" `;
         if (desc) {
             queryString += ` DESC `;
         }
     }
 
+    if (offset) {
+        queryString += ` OFFSET ${offset}`;
+    }
+
     if (limit) {
         queryString += ` LIMIT ${limit}`;
-        if (offset) {
-            queryString += ` OFFSET ${offset}`;
-        }
     }
 
     return queryString;
